@@ -1,0 +1,191 @@
+// Zuno - Community Operations and Connection OS
+// Database schema for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatarUrl     String?
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  ownedCommunities Community[]   @relation("CommunityOwner")
+  memberships      Membership[]
+  eventRsvps       EventRsvp[]
+  sentInvites      Invite[]      @relation("InviteSender")
+
+  @@map("users")
+}
+
+// ============================================
+// COMMUNITY
+// ============================================
+
+model Community {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  imageUrl    String?
+  isPublic    Boolean  @default(false)
+  timezone    String   @default("UTC")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Owner relation
+  ownerId String
+  owner   User   @relation("CommunityOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Relations
+  memberships Membership[]
+  events      Event[]
+  invites     Invite[]
+
+  @@index([ownerId])
+  @@index([slug])
+  @@map("communities")
+}
+
+// ============================================
+// MEMBERSHIP
+// ============================================
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+}
+
+model Membership {
+  id        String           @id @default(cuid())
+  role      MembershipRole   @default(MEMBER)
+  status    MembershipStatus @default(ACTIVE)
+  joinedAt  DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  // Relations
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId])
+  @@index([communityId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+// ============================================
+// EVENTS
+// ============================================
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+model Event {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  location    String?
+  locationUrl String?
+  startsAt    DateTime
+  endsAt      DateTime
+  capacity    Int?
+  status      EventStatus @default(DRAFT)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  communityId String
+  community   Community   @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  rsvps       EventRsvp[]
+
+  @@index([communityId])
+  @@index([startsAt])
+  @@map("events")
+}
+
+// ============================================
+// EVENT RSVP
+// ============================================
+
+enum RsvpStatus {
+  CONFIRMED
+  WAITLISTED
+  DECLINED
+  MAYBE
+}
+
+model EventRsvp {
+  id        String     @id @default(cuid())
+  status    RsvpStatus @default(CONFIRMED)
+  note      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
+  @@map("event_rsvps")
+}
+
+// ============================================
+// INVITES
+// ============================================
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model Invite {
+  id        String       @id @default(cuid())
+  email     String
+  token     String       @unique
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime
+  createdAt DateTime     @default(now())
+
+  // Relations
+  communityId String
+  community   Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User      @relation("InviteSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([communityId])
+  @@index([token])
+  @@index([email])
+  @@map("invites")
+}
